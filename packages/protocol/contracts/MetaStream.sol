@@ -28,22 +28,12 @@ contract MetaStream is ERC20 {
     uint256 public startTime;
     uint256 public stopTime;
 
-    address public thisContract;
-
-
-    uint256 public _tokensToBurn;
-    uint256 public _forkDepositAdjusted;
+    uint256[] public forks;
 
     constructor(address _owner, address _sablier) public {
-        /*
-        1. save sablier contract address
-        2. create metatoken for stream
-        */ 
-
         owner = _owner;
         sablier = _sablier;
         _mint(msg.sender, 100);
-        thisContract = address(this);
     }
 
     function createStream(address _recipient, uint256 deposit, address _tokenAddress, uint256 _startTime, uint256 _stopTime) public {
@@ -60,8 +50,14 @@ contract MetaStream is ERC20 {
     function cancelStream() public {
         require(msg.sender == owner, 'only owner is allowed to cancel metastream');
         ISablier(sablier).cancelStream(streamId);
-        uint256 balance = IERC20(tokenAddress).balanceOf(address(this));
-        IERC20(tokenAddress).safeTransfer(owner, balance);
+        withdrawTokens();
+    }
+
+    function cancelForkStream(uint256 forkStreamIndex) public {
+        require(msg.sender == owner, 'only owner is allowed to cancel metastream');
+        uint256 forkStreamId = forks[forkStreamIndex];
+        ISablier(sablier).cancelStream(forkStreamId);
+        withdrawTokens();
     }
 
     function withdrawTokens() public {
@@ -70,7 +66,6 @@ contract MetaStream is ERC20 {
     }
 
     function splitStream(address newRecipient, uint256 tokensToBurn) public {
-        _tokensToBurn = tokensToBurn;
         require(balanceOf(msg.sender) >= tokensToBurn);
         this.transferFrom(msg.sender, address(this), tokensToBurn);
 
@@ -85,17 +80,10 @@ contract MetaStream is ERC20 {
         uint256 mainDepositAdjusted = mainDeposit * startTime / startTime;
 
         // create a forked stream
-        ISablier(sablier).createStream(newRecipient, forkDepositAdjusted, tokenAddress, startTime, stopTime);
+        uint256 forkStreamId = ISablier(sablier).createStream(newRecipient, forkDepositAdjusted, tokenAddress, startTime, stopTime);
+        forks.push(forkStreamId);
 
         // re-create the main stream
         streamId = ISablier(sablier).createStream(recipient, mainDepositAdjusted, tokenAddress, startTime, stopTime);
-
-        /*
-        1. transferFrom metatokens to this address
-        2. cancel initial stream
-        3. compute amount of tokens to split
-        4. create main stream and the split stream
-        5. if split again, only main stream should be split again
-        */
     }
 }

@@ -39,7 +39,7 @@ contract.skip("Sablier", function sablier([alice, bob, carol, eve]) {
   shouldBehaveLikeSablier(alice, bob, carol, eve);
 });
 
-contract("MetaStream", function ([alice, bob]) {
+contract("MetaStream", function ([alice, bob, carol]) {
   beforeEach(async function() {
     const opts = { from: alice };
     this.token = await ERC20Mock.new(opts);
@@ -193,8 +193,8 @@ contract("MetaStream", function ([alice, bob]) {
       this.sender = alice
       this.recipient = bob
       this.deposit = STANDARD_SALARY.toString(10)
-      const startTime = now.plus(STANDARD_TIME_OFFSET);
-      const stopTime = startTime.plus(STANDARD_TIME_DELTA);
+      this.startTime = now.plus(STANDARD_TIME_OFFSET);
+      this.stopTime = this.startTime.plus(STANDARD_TIME_DELTA);
 
       this.metastream = await MetaStream.new(alice, this.sablier.address)
       await this.token.approve(this.metastream.address, this.deposit, opts);
@@ -202,16 +202,42 @@ contract("MetaStream", function ([alice, bob]) {
         this.recipient,
         this.deposit,
         this.token.address,
-        startTime,
-        stopTime,
+        this.startTime,
+        this.stopTime,
         opts,
       )
       this.streamId = await this.metastream.streamId()
     })
 
     it('creates a new sablier stream', async function() {
+      const streamId = +(this.streamId)
       await this.metastream.approve(this.metastream.address, 500, { from: alice });
-      await this.metastream.splitStream(bob, 50, { from: alice })
+      await this.metastream.splitStream(carol, 50, { from: alice })
+
+      this.forkStreamId = +(await this.metastream.forks(0)).toString()
+      this.streamId = +(await this.metastream.streamId()).toString()
+      this.forkStreamId.should.be.equal(streamId + 1)
+      this.streamId.should.be.equal(streamId + 2)
+
+      // verify new main stream
+      const streamObject = await this.sablier.getStream(this.streamId);
+      streamObject.sender.should.be.equal(this.metastream.address); // metastream is sender
+      streamObject.recipient.should.be.equal(bob); // recipient still
+      // streamObject.deposit.should.be.bignumber.equal(deposit);
+      streamObject.tokenAddress.should.be.equal(this.token.address);
+      streamObject.startTime.should.be.bignumber.equal(this.startTime);
+      streamObject.stopTime.should.be.bignumber.equal(this.stopTime);
+      // streamObject.remainingBalance.should.be.bignumber.equal(deposit);
+
+      // verify fork stream
+      const forkStreamObject = await this.sablier.getStream(this.forkStreamId);
+      forkStreamObject.sender.should.be.equal(this.metastream.address); // metastream is sender
+      forkStreamObject.recipient.should.be.equal(carol); // recipient is now carol
+      // forkStreamObject.deposit.should.be.bignumber.equal(deposit);
+      forkStreamObject.tokenAddress.should.be.equal(this.token.address);
+      forkStreamObject.startTime.should.be.bignumber.equal(this.startTime);
+      forkStreamObject.stopTime.should.be.bignumber.equal(this.stopTime);
+      // forkStreamObject.remainingBalance.should.be.bignumber.equal(deposit);
     })
   })
 })
